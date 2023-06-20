@@ -433,6 +433,26 @@ class PackageViewMixin:
 Pb = TypeVar("Pb", bound="PackageBase")
 
 
+def _by_name(when_indexed_dictionary):
+    """Convert a dict of dicts keyed by when/name into a dict of lists keyed by name."""
+    all_by_name = {}
+    for when, by_name in when_indexed_dictionary.items():
+        for name, value in by_name.items():
+            all_by_name.setdefault(name, []).append(value)
+
+    return dict(sorted(all_by_name.items()))
+
+
+def _names(when_indexed_dictionary):
+    """Get sorted names from dicts keyed by when/name."""
+    all_names = set()
+    for when, by_name in when_indexed_dictionary.items():
+        for name in by_name:
+            all_names.add(name)
+
+    return sorted(all_names)
+
+
 class PackageBase(WindowsRPath, PackageViewMixin, metaclass=PackageMeta):
     """This is the superclass for all spack packages.
 
@@ -680,6 +700,14 @@ class PackageBase(WindowsRPath, PackageViewMixin, metaclass=PackageMeta):
         super().__init__()
 
     @classmethod
+    def dependency_names(cls):
+        return _names(cls.dependencies)
+
+    @classmethod
+    def dependencies_by_name(cls):
+        return _by_name(cls.dependencies)
+
+    @classmethod
     def possible_dependencies(
         cls,
         transitive=True,
@@ -727,7 +755,7 @@ class PackageBase(WindowsRPath, PackageViewMixin, metaclass=PackageMeta):
 
         visited.setdefault(cls.name, set())
 
-        for name, conditions in cls.dependencies.items():
+        for name, dependencies in cls.dependencies_by_name().items():
             # check whether this dependency could be of the type asked for
             depflag_union = 0
             for dep in conditions.values():
@@ -1205,7 +1233,7 @@ class PackageBase(WindowsRPath, PackageViewMixin, metaclass=PackageMeta):
 
     @classmethod
     def dependencies_of_type(cls, deptypes: dt.DepFlag):
-        """Get dependencies that can possibly have these deptypes.
+        """Get names of dependencies that can possibly have these deptypes.
 
         This analyzes the package and determines which dependencies *can*
         be a certain kind of dependency. Note that they may not *always*
@@ -1213,11 +1241,11 @@ class PackageBase(WindowsRPath, PackageViewMixin, metaclass=PackageMeta):
         so something may be a build dependency in one configuration and a
         run dependency in another.
         """
-        return dict(
-            (name, conds)
-            for name, conds in cls.dependencies.items()
-            if any(deptypes & cls.dependencies[name][cond].depflag for cond in conds)
-        )
+        return {
+            name
+            for name, dependencies in cls.dependencies_by_name().items()
+            if any(deptypes & dep.depflag for dep in dependencies)
+        }
 
     # TODO: allow more than one active extendee.
     @property

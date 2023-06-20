@@ -29,11 +29,12 @@ The available directives are:
   * ``requires``
 
 """
+import collections
 import collections.abc
 import functools
 import os.path
 import re
-from typing import Any, Callable, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import llnl.util.lang
 import llnl.util.tty.color
@@ -132,6 +133,9 @@ class DirectiveMeta(type):
     area into the package.
     """
 
+    # type information for all known directive dictionaries
+    # dependencies = Dict[spack.spec.Spec, Dict[str, Dependency]]
+
     # Set of all known directives
     _directive_dict_names: Set[str] = set()
     _directives_to_be_executed: List[str] = []
@@ -173,8 +177,8 @@ class DirectiveMeta(type):
         # that the directives are called to set it up.
 
         if "spack.pkg" in cls.__module__:
-            # Ensure the presence of the dictionaries associated
-            # with the directives
+            # Ensure the presence of the dictionaries associated with the directives.
+            # All dictionaries are defaultdicts that create lists for missing keys.
             for d in DirectiveMeta._directive_dict_names:
                 setattr(cls, d, {})
 
@@ -449,7 +453,6 @@ def _depends_on(pkg, spec, when=None, type=dt.DEFAULT_TYPES, patches=None):
         raise CircularReferenceError("Package '%s' cannot depend on itself." % pkg.name)
 
     depflag = dt.canonicalize(type)
-    conditions = pkg.dependencies.setdefault(dep_spec.name, {})
 
     # call this patches here for clarity -- we want patch to be a list,
     # but the caller doesn't have to make it one.
@@ -477,11 +480,13 @@ def _depends_on(pkg, spec, when=None, type=dt.DEFAULT_TYPES, patches=None):
     assert all(callable(p) for p in patches)
 
     # this is where we actually add the dependency to this package
-    if when_spec not in conditions:
+    deps_by_name = pkg.dependencies.setdefault(when_spec, {})
+    dependency = deps_by_name.get(dep_spec.name)
+
+    if not dependency:
         dependency = Dependency(pkg, dep_spec, depflag=depflag)
-        conditions[when_spec] = dependency
+        deps_by_name[dep_spec.name] = dependency
     else:
-        dependency = conditions[when_spec]
         dependency.spec.constrain(dep_spec, deps=False)
         dependency.depflag |= depflag
 

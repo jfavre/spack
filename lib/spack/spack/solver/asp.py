@@ -1470,8 +1470,8 @@ class SpackSolverSetup:
 
     def package_dependencies_rules(self, pkg):
         """Translate 'depends_on' directives into ASP logic."""
-        for _, conditions in sorted(pkg.dependencies.items()):
-            for cond, dep in sorted(conditions.items()):
+        for cond, deps_by_name in sorted(pkg.dependencies.items()):
+            for _, dep in sorted(deps_by_name.items()):
                 depflag = dep.depflag
                 # Skip test dependencies if they're not requested
                 if not self.tests:

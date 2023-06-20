@@ -592,15 +592,13 @@ def _unknown_variants_in_directives(pkgs, error_cls):
                 )
 
         # Check "depends_on" directive
-        for _, triggers in pkg_cls.dependencies.items():
-            triggers = list(triggers)
-            for trigger in list(triggers):
-                vrn = spack.spec.Spec(trigger)
-                errors.extend(
-                    _analyze_variants_in_directive(
-                        pkg_cls, vrn, directive="depends_on", error_cls=error_cls
-                    )
+        for trigger in pkg_cls.dependencies:
+            vrn = spack.spec.Spec(trigger)
+            errors.extend(
+                _analyze_variants_in_directive(
+                    pkg_cls, vrn, directive="depends_on", error_cls=error_cls
                 )
+            )
 
         # Check "patch" directive
         for _, triggers in pkg_cls.provided.items():
@@ -630,41 +628,45 @@ def _unknown_variants_in_dependencies(pkgs, error_cls):
     for pkg_name in pkgs:
         pkg_cls = spack.repo.PATH.get_pkg_class(pkg_name)
         filename = spack.repo.PATH.filename_for_package_name(pkg_name)
-        for dependency_name, dependency_data in pkg_cls.dependencies.items():
-            # No need to analyze virtual packages
-            if spack.repo.PATH.is_virtual(dependency_name):
-                continue
 
-            try:
-                dependency_pkg_cls = spack.repo.PATH.get_pkg_class(dependency_name)
-            except spack.repo.UnknownPackageError:
-                # This dependency is completely missing, so report
-                # and continue the analysis
-                summary = pkg_name + ": unknown package '{0}' in " "'depends_on' directive".format(
-                    dependency_name
-                )
-                details = [" in " + filename]
-                errors.append(error_cls(summary=summary, details=details))
-                continue
+        for _, deps_by_name in pkg_cls.dependencies.items():
+            for dep_name, dep in deps_by_name.items():
+                # No need to analyze virtual packages
+                if spack.repo.PATH.is_virtual(dep_name):
+                    continue
 
-            for _, dependency_edge in dependency_data.items():
-                dependency_variants = dependency_edge.spec.variants
+                # check for unknown dependencies
+                try:
+                    dependency_pkg_cls = spack.repo.PATH.get_pkg_class(dep_name)
+                except spack.repo.UnknownPackageError:
+                    # This dependency is completely missing, so report
+                    # and continue the analysis
+                    summary = (
+                        f"{pkg_name}: unknown package '{dep_name}' in " "'depends_on' directive"
+                    )
+                    details = [f" in {filename}"]
+                    errors.append(error_cls(summary=summary, details=details))
+                    continue
+
+                # check variants
+                dependency_variants = dep.spec.variants
                 for name, value in dependency_variants.items():
                     try:
                         v, _ = dependency_pkg_cls.variants[name]
                         v.validate_or_raise(value, pkg_cls=dependency_pkg_cls)
                     except Exception as e:
                         summary = (
-                            pkg_name + ": wrong variant used for a "
-                            "dependency in a 'depends_on' directive"
+                            f"{pkg_name}: wrong variant used for dependency in 'depends_on()'"
                         )
-                        error_msg = str(e).strip()
+
                         if isinstance(e, KeyError):
-                            error_msg = "the variant {0} does not " "exist".format(error_msg)
-                        error_msg += " in package '" + dependency_name + "'"
+                            error_msg = (
+                                f"variant {str(e).strip()} does not exist in package {dep_name}"
+                            )
+                        error_msg += f" in package '{dep_name}'"
 
                         errors.append(
-                            error_cls(summary=summary, details=[error_msg, "in " + filename])
+                            error_cls(summary=summary, details=[error_msg, f"in {filename}"])
                         )
 
     return errors
@@ -731,14 +733,17 @@ def _version_constraints_are_satisfiable_by_some_version_in_repo(pkgs, error_cls
     for pkg_name in pkgs:
         pkg_cls = spack.repo.PATH.get_pkg_class(pkg_name)
         filename = spack.repo.PATH.filename_for_package_name(pkg_name)
-        dependencies_to_check = []
-        for dependency_name, dependency_data in pkg_cls.dependencies.items():
-            # Skip virtual dependencies for the time being, check on
-            # their versions can be added later
-            if spack.repo.PATH.is_virtual(dependency_name):
-                continue
 
-            dependencies_to_check.extend([edge.spec for edge in dependency_data.values()])
+        dependencies_to_check = []
+
+        for _, deps_by_name in pkg_cls.dependencies.items():
+            for dep_name, dep in deps_by_name.items():
+                # Skip virtual dependencies for the time being, check on
+                # their versions can be added later
+                if spack.repo.PATH.is_virtual(dep_name):
+                    continue
+
+                dependencies_to_check.append(dep.spec)
 
         host_architecture = spack.spec.ArchSpec.default_arch()
         for s in dependencies_to_check:
