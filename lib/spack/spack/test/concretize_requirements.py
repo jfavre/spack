@@ -866,6 +866,8 @@ def test_skip_requirement_when_default_requirement_condition_cannot_be_met(
 
 def test_requires_directive(concretize_scope, mock_packages):
     compilers_yaml = pathlib.Path(concretize_scope) / "compilers.yaml"
+
+    # NOTE: target is omitted here so that the test works on aarch64, as well.
     compilers_yaml.write_text(
         """
 compilers::
@@ -877,7 +879,6 @@ compilers::
       f77: null
       fc: null
     operating_system: debian6
-    target: x86_64
     modules: []
 """
     )
