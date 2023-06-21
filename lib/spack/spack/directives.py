@@ -577,7 +577,7 @@ def extends(spec, when=None, type=("build", "run"), patches=None):
 
 
 @directive("provided")
-def provides(*specs, **kwargs):
+def provides(*specs, when=None):
     """Allows packages to provide a virtual dependency.  If a package provides
     'mpi', other packages can declare that they depend on "mpi", and spack
     can use the providing package to satisfy the dependency.
@@ -586,7 +586,6 @@ def provides(*specs, **kwargs):
     def _execute_provides(pkg):
         import spack.parser  # Avoid circular dependency
 
-        when = kwargs.get("when")
         when_spec = make_when_spec(when)
         if not when_spec:
             return
@@ -600,9 +599,8 @@ def provides(*specs, **kwargs):
                 if pkg.name == provided_spec.name:
                     raise CircularReferenceError("Package '%s' cannot provide itself." % pkg.name)
 
-                if provided_spec not in pkg.provided:
-                    pkg.provided[provided_spec] = set()
-                pkg.provided[provided_spec].add(when_spec)
+                provided_set = pkg.provided.setdefault(when_spec, set())
+                provided_set.add(provided_spec)
 
     return _execute_provides
 

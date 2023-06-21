@@ -1307,9 +1307,9 @@ class PackageBase(WindowsRPath, PackageViewMixin, metaclass=PackageMeta):
         True if this package provides a virtual package with the specified name
         """
         return any(
-            any(self.spec.intersects(c) for c in constraints)
-            for s, constraints in self.provided.items()
-            if s.name == vpkg_name
+            any(spec.name == vpkg_name for spec in provided)
+            for when_spec, provided in self.provided.items()
+            if self.spec.intersects(when_spec)
         )
 
     @property
@@ -1319,9 +1319,15 @@ class PackageBase(WindowsRPath, PackageViewMixin, metaclass=PackageMeta):
         """
         return [
             vspec
-            for vspec, constraints in self.provided.items()
-            if any(self.spec.satisfies(c) for c in constraints)
+            for when_spec, provided in self.provided.items()
+            for vspec in provided
+            if self.spec.satisfies(when_spec)
         ]
+
+    @classmethod
+    def provided_virtual_names(cls):
+        """Return sorted list of names of virtuals that can be provided by this package."""
+        return sorted(set(vpkg.name for virtuals in cls.provided.values() for vpkg in virtuals))
 
     @property
     def prefix(self):

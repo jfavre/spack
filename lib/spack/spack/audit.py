@@ -600,15 +600,13 @@ def _unknown_variants_in_directives(pkgs, error_cls):
                 )
             )
 
-        # Check "patch" directive
-        for _, triggers in pkg_cls.provided.items():
-            triggers = [spack.spec.Spec(x) for x in triggers]
-            for vrn in triggers:
-                errors.extend(
-                    _analyze_variants_in_directive(
-                        pkg_cls, vrn, directive="patch", error_cls=error_cls
-                    )
+        # Check "provides" directive
+        for when_spec in pkg_cls.provided.keys():
+            errors.extend(
+                _analyze_variants_in_directive(
+                    pkg_cls, when_spec, directive="provides", error_cls=error_cls
                 )
+            )
 
         # Check "resource" directive
         for vrn in pkg_cls.resources:
