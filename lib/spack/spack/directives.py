@@ -523,9 +523,9 @@ def conflicts(conflict_spec, when=None, msg=None):
             return
 
         # Save in a list the conflicts and the associated custom messages
-        when_spec_list = pkg.conflicts.setdefault(conflict_spec, [])
+        conflict_spec_list = pkg.conflicts.setdefault(when_spec, [])
         msg_with_name = f"{pkg.name}: {msg}" if msg is not None else msg
-        when_spec_list.append((when_spec, msg_with_name))
+        conflict_spec_list.append((conflict_spec, msg_with_name))
 
     return _execute_conflicts
 

@@ -1081,24 +1081,28 @@ class SpackSolverSetup:
 
     def conflict_rules(self, pkg):
         default_msg = "{0}: '{1}' conflicts with '{2}'"
-        no_constraint_msg = "{0}: conflicts with '{1}'"
-        for trigger, constraints in pkg.conflicts.items():
-            trigger_msg = "conflict trigger %s" % str(trigger)
-            trigger_spec = spack.spec.Spec(trigger)
-            trigger_id = self.condition(
-                trigger_spec, name=trigger_spec.name or pkg.name, msg=trigger_msg
-            )
+        no_when_spec_msg = "{0}: conflicts with '{1}'"
 
-            for constraint, conflict_msg in constraints:
+        for when_spec, conflict_specs in pkg.conflicts.items():
+            when_spec_msg = "conflict constraint %s" % str(when_spec)
+            when_spec_id = self.condition(when_spec, name=pkg.name, msg=when_spec_msg)
+
+            for conflict_spec, conflict_msg in conflict_specs:
+                conflict_spec = spack.spec.Spec(conflict_spec)
                 if conflict_msg is None:
-                    if constraint == spack.spec.Spec():
-                        conflict_msg = no_constraint_msg.format(pkg.name, trigger)
+                    if when_spec == spack.spec.Spec():
+                        conflict_msg = no_when_spec_msg.format(pkg.name, conflict_spec)
                     else:
-                        conflict_msg = default_msg.format(pkg.name, trigger, constraint)
-                constraint_msg = "conflict constraint %s" % str(constraint)
-                constraint_id = self.condition(constraint, name=pkg.name, msg=constraint_msg)
+                        conflict_msg = default_msg.format(pkg.name, conflict_spec, when_spec)
+
+                conflict_spec_msg = "conflict trigger %s" % str(conflict_spec)
+                conflict_spec_id = self.condition(
+                    conflict_spec, name=conflict_spec.name or pkg.name, msg=conflict_spec_msg
+                )
                 self.gen.fact(
-                    fn.pkg_fact(pkg.name, fn.conflict(trigger_id, constraint_id, conflict_msg))
+                    fn.pkg_fact(
+                        pkg.name, fn.conflict(conflict_spec_id, when_spec_id, conflict_msg)
+                    )
                 )
                 self.gen.newline()
 
