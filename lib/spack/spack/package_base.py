@@ -433,12 +433,21 @@ class PackageViewMixin:
 Pb = TypeVar("Pb", bound="PackageBase")
 
 
-def _by_name(when_indexed_dictionary):
-    """Convert a dict of dicts keyed by when/name into a dict of lists keyed by name."""
+def _by_name(when_indexed_dictionary, when: bool = False):
+    """Convert a dict of dicts keyed by when/name into a dict of lists keyed by name.
+
+    Optional Arguments:
+        when: if ``True``, don't discared the ``when`` specs; return a 2-level dictionary
+            keyed by name and when spec.
+    """
     all_by_name = {}
-    for when, by_name in when_indexed_dictionary.items():
+    for when_spec, by_name in when_indexed_dictionary.items():
         for name, value in by_name.items():
-            all_by_name.setdefault(name, []).append(value)
+            if when:
+                when_dict = all_by_name.setdefault(name, {})
+                when_dict.setdefault(when_spec, []).append(value)
+            else:
+                all_by_name.setdefault(name, []).append(value)
 
     return dict(sorted(all_by_name.items()))
 
@@ -706,6 +715,23 @@ class PackageBase(WindowsRPath, PackageViewMixin, metaclass=PackageMeta):
     @classmethod
     def dependencies_by_name(cls):
         return _by_name(cls.dependencies)
+
+    @classmethod
+    def variant_names(cls):
+        return _names(cls.variants)
+
+    @classmethod
+    def variants_by_name(cls, when: bool = False):
+        return _by_name(cls.variants, when)
+
+    def variant_descriptor(self, name):
+        """Get the variant descriptor for a variant on this package's spec."""
+        if name not in self.spec.variants:
+            raise ValueError(f"No variant '{name}' on spec: {self.spec}")
+
+        for when, variants_by_name in self.variants.items():
+            if self.spec.satisfies(when) and name in variants_by_name:
+                return variants_by_name[name]
 
     @classmethod
     def possible_dependencies(

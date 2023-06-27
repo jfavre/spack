@@ -23,6 +23,23 @@ from spack.util.string import comma_or
 special_variant_values = [None, "none", "*"]
 
 
+class ValidValue:
+    def __init__(self, values):
+        self._values = values
+
+    def __call__(self, v):
+        return v in self._values
+
+    def __eq__(self, other):
+        return self._values == other._values
+
+    def __str__(self):
+        return f"<valid if in {self._values}>"
+
+
+always_true = lambda x: True
+
+
 class Variant:
     """Represents a variant in a package, as declared in the
     variant directive.
@@ -61,7 +78,7 @@ class Variant:
         self.values = None
         if values == "*":
             # wildcard is a special case to make it easy to say any value is ok
-            self.single_value_validator = lambda x: True
+            self.single_value_validator = always_true
 
         elif isinstance(values, type):
             # supplying a type means any value *of that type*
@@ -81,7 +98,7 @@ class Variant:
         else:
             # Otherwise, assume values is the set of allowed explicit values
             self.values = _flatten(values)
-            self.single_value_validator = lambda x: x in tuple(self.values)
+            self.single_value_validator = ValidValue(self.values)
 
         self.multi = multi
         self.group_validator = validator
@@ -190,6 +207,12 @@ class Variant:
 
     def __ne__(self, other):
         return not self == other
+
+    def __str__(self):
+        return (
+            f"Variant('{self.name}', '{self.default}', {self.values}, "
+            f"{self.multi}, {self.single_value_validator}, {self.group_validator}"
+        )
 
 
 def implicit_variant_conversion(method):

@@ -512,9 +512,15 @@ def _ensure_env_methods_are_ported_to_builders(pkgs, error_cls):
     errors = []
     for pkg_name in pkgs:
         pkg_cls = spack.repo.PATH.get_pkg_class(pkg_name)
-        buildsystem_variant, _ = pkg_cls.variants["build_system"]
-        buildsystem_names = [getattr(x, "value", x) for x in buildsystem_variant.values]
+
+        buildsystem_names = set()
+        for variants_by_name in pkg_cls.variants.values():
+            buildsystem_variant = variants_by_name.get("build_system")
+            if buildsystem_variant:
+                buildsystem_names.add(getattr(v, "value", v) for v in buildsystem_variant.values)
+
         builder_cls_names = [spack.builder.BUILDER_CLS[x].__name__ for x in buildsystem_names]
+
         module = pkg_cls.module
         has_builders_in_package_py = any(
             getattr(module, name, False) for name in builder_cls_names
@@ -647,11 +653,14 @@ def _unknown_variants_in_dependencies(pkgs, error_cls):
                     continue
 
                 # check variants
-                dependency_variants = dep.spec.variants
-                for name, value in dependency_variants.items():
+                variants_by_name = dependency_pkg_cls.variants_by_name()
+                all_variants = sum(
+                    [variants_by_name[name] for name in dep.spec.variants], start=[]
+                )
+
+                for variant in all_variants:
                     try:
-                        v, _ = dependency_pkg_cls.variants[name]
-                        v.validate_or_raise(value, pkg_cls=dependency_pkg_cls)
+                        variant.validate_or_raise(value, pkg_cls=dependency_pkg_cls)
                     except Exception as e:
                         summary = (
                             f"{pkg_name}: wrong variant used for dependency in 'depends_on()'"
@@ -782,22 +791,25 @@ def _analyze_variants_in_directive(pkg, constraint, directive, error_cls):
         spack.variant.InvalidVariantValueError,
         KeyError,
     )
+
     errors = []
-    for name, v in constraint.variants.items():
-        try:
-            variant, _ = pkg.variants[name]
-            variant.validate_or_raise(v, pkg_cls=pkg)
-        except variant_exceptions as e:
-            summary = pkg.name + ': wrong variant in "{0}" directive'
-            summary = summary.format(directive)
-            filename = spack.repo.PATH.filename_for_package_name(pkg.name)
+    for name in constraint.variants:
+        variants = pkg.variants_by_name()[name]
 
-            error_msg = str(e).strip()
-            if isinstance(e, KeyError):
-                error_msg = "the variant {0} does not exist".format(error_msg)
+        for variant in variants:
+            try:
+                variant.validate_or_raise(v, pkg_cls=pkg)
+            except variant_exceptions as e:
+                summary = pkg.name + ': wrong variant in "{0}" directive'
+                summary = summary.format(directive)
+                filename = spack.repo.PATH.filename_for_package_name(pkg.name)
 
-            err = error_cls(summary=summary, details=[error_msg, "in " + filename])
+                error_msg = str(e).strip()
+                if isinstance(e, KeyError):
+                    error_msg = "the variant {0} does not exist".format(error_msg)
 
-            errors.append(err)
+                err = error_cls(summary=summary, details=[error_msg, "in " + filename])
+
+                errors.append(err)
 
     return errors

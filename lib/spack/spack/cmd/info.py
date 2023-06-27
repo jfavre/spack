@@ -73,34 +73,9 @@ def variant(s):
 
 
 class VariantFormatter:
-    def __init__(self, variants):
-        self.variants = variants
+    def __init__(self, pkg):
+        self.variants = pkg.variants
         self.headers = ("Name [Default]", "When", "Allowed values", "Description")
-
-        # Formats
-        fmt_name = "{0} [{1}]"
-
-        # Initialize column widths with the length of the
-        # corresponding headers, as they cannot be shorter
-        # than that
-        self.column_widths = [len(x) for x in self.headers]
-
-        # Expand columns based on max line lengths
-        for k, e in variants.items():
-            v, w = e
-            candidate_max_widths = (
-                len(fmt_name.format(k, self.default(v))),  # Name [Default]
-                len(str(w)),
-                len(v.allowed_values),  # Allowed values
-                len(v.description),  # Description
-            )
-
-            self.column_widths = (
-                max(self.column_widths[0], candidate_max_widths[0]),
-                max(self.column_widths[1], candidate_max_widths[1]),
-                max(self.column_widths[2], candidate_max_widths[2]),
-                max(self.column_widths[3], candidate_max_widths[3]),
-            )
 
         # Don't let name or possible values be less than max widths
         _, cols = tty.terminal_size()
@@ -133,6 +108,8 @@ class VariantFormatter:
     def lines(self):
         if not self.variants:
             yield "    None"
+            return
+
         else:
             yield "    " + self.fmt % self.headers
             underline = tuple([w * "=" for w in self.column_widths])
@@ -267,15 +244,99 @@ def print_tests(pkg):
         color.cprint("    None")
 
 
+def _fmt_value(v):
+    if v is None or isinstance(v, bool):
+        return str(v).lower()
+    else:
+        return str(v)
+
+
+def _fmt_name_and_default(variant, indent):
+    """Print colorized name [default] for a variant."""
+    return color.colorize(
+        f"{' ' * indent}@c{{{variant.name}}} @C{{[{_fmt_value(variant.default)}]}}"
+    )
+
+
+def _fmt_description(variant, indent):
+    pass
+
+
+def _fmt_when(variant, indent):
+    pass
+
+
+def _fmt_variant(variant, when, max_name_default_len, indent):
+    _, cols = tty.terminal_size()
+
+    name_and_default = _fmt_name_and_default(variant, indent)
+    name_default_len = color.clen(name_and_default)
+
+    values = variant.values
+    if not isinstance(variant.values, (tuple, list, spack.variant.DisjointSetsOfValues)):
+        values = [variant.values]
+
+    pad = 4
+    formatted_values = "\n".join(
+        textwrap.wrap(
+            f"{', '.join(_fmt_value(v) for v in values)}",
+            width=cols - 4,
+            initial_indent=(max_name_default_len + pad) * " ",
+            subsequent_indent=(max_name_default_len + pad) * " ",
+        )
+    )
+    formatted_values = formatted_values[name_default_len + pad :]
+
+    padding = pad * " "
+    color.cprint(f"{name_and_default}{padding}@c{{{formatted_values}}}")
+    if when != spack.spec.Spec():
+        color.cprint(f"      @B{{when}} {color.cescape(when)}")
+
+    indent = "        "
+    description = "\n".join(
+        textwrap.fill(line, width=cols - 8, initial_indent=indent, subsequent_indent=indent)
+        for line in variant.description.split("\n")
+    )
+    print(description)
+
+
 def print_variants(pkg):
     """output variants"""
+
+    if not pkg.variants:
+        print("    None")
+        return
 
     color.cprint("")
     color.cprint(section_title("Variants:"))
 
-    formatter = VariantFormatter(pkg.variants)
-    for line in formatter.lines:
-        color.cprint(color.cescape(line))
+    variants_by_name = pkg.variants_by_name(when=True)
+
+    # calculate the max length of the "name [default]" part of the variant display
+    max_name_default_len = max(
+        color.clen(_fmt_name_and_default(variant, 4))
+        for name, when_variants in variants_by_name.items()
+        for variants in when_variants.values()
+        for variant in variants
+    )
+
+    for name, when_variants in variants_by_name.items():
+        if len(when_variants) > 1:
+            print("    ", len(when_variants), "variants")
+            all_variants = sum(when_variants.values(), start=[])
+            if not all(v == all_variants[0] for v in all_variants):
+                color.cprint(f"@r{{-->}} @c{{{name}}} (different)")
+            else:
+                color.cprint(f"@g{{-->}} @c{{{name}}} (same)")
+
+            for when, variants in when_variants.items():
+                for variant in variants:
+                    _fmt_variant(variant, when, max_name_default_len, 8)
+            #            print("       ", "\n        ".join(str(v) for k, v in when_variants.items()))
+            continue
+
+        when, variants = next(iter(when_variants.items()))
+        _fmt_variant(variants[0], when, max_name_default_len, 4)
 
 
 def print_versions(pkg):
