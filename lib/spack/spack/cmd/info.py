@@ -275,6 +275,7 @@ def _fmt_variant(variant, when, max_name_default_len, indent):
     values = variant.values
     if not isinstance(variant.values, (tuple, list, spack.variant.DisjointSetsOfValues)):
         values = [variant.values]
+        print(type(values), values)
 
     pad = 4
     formatted_values = "\n".join(
