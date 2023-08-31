@@ -3,6 +3,7 @@
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
+import sys
 import textwrap
 from itertools import zip_longest
 
@@ -251,25 +252,31 @@ def _fmt_value(v):
         return str(v)
 
 
-def _fmt_name_and_default(variant, indent):
+def _fmt_name_and_default(variant):
     """Print colorized name [default] for a variant."""
-    return color.colorize(
-        f"{' ' * indent}@c{{{variant.name}}} @C{{[{_fmt_value(variant.default)}]}}"
-    )
-
-
-def _fmt_description(variant, indent):
-    pass
+    return color.colorize(f"@c{{{variant.name}}} @C{{[{_fmt_value(variant.default)}]}}")
 
 
 def _fmt_when(variant, indent):
     pass
 
 
-def _fmt_variant(variant, when, max_name_default_len, indent):
+def _fmt_variant_description(variant, width, indent):
+    """Format a variant's description, preserving explicit line breaks."""
+    return "\n".join(
+        textwrap.fill(
+            line, width=width, initial_indent=indent * " ", subsequent_indent=indent * " "
+        )
+        for line in variant.description.split("\n")
+    )
+
+
+def _fmt_variant(variant, when, max_name_default_len, indent, out=None):
+    out = out or sys.stdout
+
     _, cols = tty.terminal_size()
 
-    name_and_default = _fmt_name_and_default(variant, indent)
+    name_and_default = _fmt_name_and_default(variant)
     name_default_len = color.clen(name_and_default)
 
     values = variant.values
@@ -277,28 +284,33 @@ def _fmt_variant(variant, when, max_name_default_len, indent):
         values = [variant.values]
         print(type(values), values)
 
-    pad = 4
+    # put 'none' first, sort the rest by value
+    sorted_values = sorted(values, key=lambda v: (v != "none", v))
+
+    pad = 4  # min padding between 'name [default]' and values
+    value_indent = (indent + max_name_default_len + pad) * " "  # left edge of values
+
     formatted_values = "\n".join(
         textwrap.wrap(
-            f"{', '.join(_fmt_value(v) for v in values)}",
-            width=cols - 4,
-            initial_indent=(max_name_default_len + pad) * " ",
-            subsequent_indent=(max_name_default_len + pad) * " ",
+            f"{', '.join(_fmt_value(v) for v in sorted_values)}",
+            width=cols - 2,
+            initial_indent=value_indent,
+            subsequent_indent=value_indent,
         )
     )
-    formatted_values = formatted_values[name_default_len + pad :]
+    formatted_values = formatted_values[indent + name_default_len + pad :]
 
+    # name [default]   value1, value2, value3, ...
     padding = pad * " "
-    color.cprint(f"{name_and_default}{padding}@c{{{formatted_values}}}")
-    if when != spack.spec.Spec():
-        color.cprint(f"      @B{{when}} {color.cescape(when)}")
+    color.cprint(f"{indent * ' '}{name_and_default}{padding}@c{{{formatted_values}}}", stream=out)
 
-    indent = "        "
-    description = "\n".join(
-        textwrap.fill(line, width=cols - 8, initial_indent=indent, subsequent_indent=indent)
-        for line in variant.description.split("\n")
-    )
-    print(description)
+    # when <spec>
+    if when != spack.spec.Spec():
+        color.cprint(f"{(indent*2) * ' '}@B{{when}} {color.cescape(when)}", stream=out)
+
+    # description, preserving explicit line breaks from the way it's written in the package file
+    out.write(_fmt_variant_description(variant, cols - 2, indent * 3))
+    out.write("\n")
 
 
 def print_variants(pkg):
@@ -315,29 +327,35 @@ def print_variants(pkg):
 
     # calculate the max length of the "name [default]" part of the variant display
     max_name_default_len = max(
-        color.clen(_fmt_name_and_default(variant, 4))
+        color.clen(_fmt_name_and_default(variant))
         for name, when_variants in variants_by_name.items()
         for variants in when_variants.values()
         for variant in variants
     )
 
+    conditionals = {}
+
+    indent = 4
     for name, when_variants in variants_by_name.items():
+        from pprint import pprint
+
+        pprint(when_variants)
+
         if len(when_variants) > 1:
             print("    ", len(when_variants), "variants")
             all_variants = sum(when_variants.values(), start=[])
             if not all(v == all_variants[0] for v in all_variants):
-                color.cprint(f"@r{{-->}} @c{{{name}}} (different)")
+                color.cprint(f"@r{{-->}} @r{{{name}}} (different)")
             else:
-                color.cprint(f"@g{{-->}} @c{{{name}}} (same)")
+                color.cprint(f"@g{{-->}} @g{{{name}}} (same)")
 
             for when, variants in when_variants.items():
                 for variant in variants:
-                    _fmt_variant(variant, when, max_name_default_len, 8)
-            #            print("       ", "\n        ".join(str(v) for k, v in when_variants.items()))
+                    _fmt_variant(variant, when, max_name_default_len, indent, out=sys.stdout)
             continue
 
         when, variants = next(iter(when_variants.items()))
-        _fmt_variant(variants[0], when, max_name_default_len, 4)
+        _fmt_variant(variants[0], when, max_name_default_len, indent, out=sys.stdout)
 
 
 def print_versions(pkg):
