@@ -1631,7 +1631,11 @@ class SpackSolverSetup:
 
                 try:
                     member_id = self.condition(
-                        required_spec=when_spec, imposed_spec=spec, name=pkg_name, node=virtual
+                        required_spec=when_spec,
+                        imposed_spec=spec,
+                        name=pkg_name,
+                        node=virtual,
+                        msg=f"{spec_str} is a requirement for package {pkg_name}"
                     )
                 except Exception as e:
                     # Do not raise if the rule comes from the 'all' subsection, since usability
