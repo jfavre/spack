@@ -17,6 +17,7 @@ import spack.fetch_strategy as fs
 import spack.install_test
 import spack.repo
 import spack.spec
+import spack.version
 from spack.package_base import preferred_version
 
 description = "get detailed information on a particular package"
@@ -54,6 +55,7 @@ def setup_parser(subparser):
         ("--tags", print_tags.__doc__),
         ("--tests", print_tests.__doc__),
         ("--virtuals", print_virtuals.__doc__),
+        ("--variants-by-name", "list variants in strict name order; don't group by condition"),
     ]
     for opt, help_comment in options:
         subparser.add_argument(opt, action="store_true", help=help_comment)
@@ -257,8 +259,8 @@ def _fmt_name_and_default(variant):
     return color.colorize(f"@c{{{variant.name}}} @C{{[{_fmt_value(variant.default)}]}}")
 
 
-def _fmt_when(variant, indent):
-    pass
+def _fmt_when(when, indent):
+    return color.colorize(f"{indent * ' '}@B{{when}} {color.cescape(when)}")
 
 
 def _fmt_variant_description(variant, width, indent):
@@ -271,7 +273,7 @@ def _fmt_variant_description(variant, width, indent):
     )
 
 
-def _fmt_variant(variant, when, max_name_default_len, indent, out=None):
+def _fmt_variant(variant, max_name_default_len, indent, when=None, out=None):
     out = out or sys.stdout
 
     _, cols = tty.terminal_size()
@@ -282,7 +284,6 @@ def _fmt_variant(variant, when, max_name_default_len, indent, out=None):
     values = variant.values
     if not isinstance(variant.values, (tuple, list, spack.variant.DisjointSetsOfValues)):
         values = [variant.values]
-        print(type(values), values)
 
     # put 'none' first, sort the rest by value
     sorted_values = sorted(values, key=lambda v: (v != "none", v))
@@ -290,6 +291,9 @@ def _fmt_variant(variant, when, max_name_default_len, indent, out=None):
     pad = 4  # min padding between 'name [default]' and values
     value_indent = (indent + max_name_default_len + pad) * " "  # left edge of values
 
+    # This preserves any formatting (i.e., newlines) from how the description was
+    # written in package.py, but still wraps long lines for small terminals.
+    # This allows some packages to provide detailed help on their variants (see gasnet).
     formatted_values = "\n".join(
         textwrap.wrap(
             f"{', '.join(_fmt_value(v) for v in sorted_values)}",
@@ -305,15 +309,17 @@ def _fmt_variant(variant, when, max_name_default_len, indent, out=None):
     color.cprint(f"{indent * ' '}{name_and_default}{padding}@c{{{formatted_values}}}", stream=out)
 
     # when <spec>
-    if when != spack.spec.Spec():
-        color.cprint(f"{(indent*2) * ' '}@B{{when}} {color.cescape(when)}", stream=out)
+    description_indent = indent + 4
+    if when is not None and when != spack.spec.Spec():
+        out.write(_fmt_when(when, description_indent - 2))
+        out.write("\n")
 
     # description, preserving explicit line breaks from the way it's written in the package file
-    out.write(_fmt_variant_description(variant, cols - 2, indent * 3))
+    out.write(_fmt_variant_description(variant, cols - 2, description_indent))
     out.write("\n")
 
 
-def print_variants(pkg):
+def _print_variants_header(pkg):
     """output variants"""
 
     if not pkg.variants:
@@ -325,7 +331,8 @@ def print_variants(pkg):
 
     variants_by_name = pkg.variants_by_name(when=True)
 
-    # calculate the max length of the "name [default]" part of the variant display
+    # Calculate the max length of the "name [default]" part of the variant display
+    # This lets us know where to print variant values.
     max_name_default_len = max(
         color.clen(_fmt_name_and_default(variant))
         for name, when_variants in variants_by_name.items()
@@ -333,29 +340,51 @@ def print_variants(pkg):
         for variant in variants
     )
 
-    conditionals = {}
+    return max_name_default_len, variants_by_name
+
+
+def _unconstrained_ver_first(item):
+    """sort key that puts specs with open version ranges first"""
+    spec, _ = item
+    return (spack.version.any_version not in spec.versions, spec)
+
+
+def print_variants_grouped_by_when(pkg):
+    max_name_default_len, _ = _print_variants_header(pkg)
+
+    indent = 4
+    for when, variants_by_name in sorted(pkg.variants.items(), key=_unconstrained_ver_first):
+        padded_values = max_name_default_len + 4
+        start_indent = indent
+
+        if when != spack.spec.Spec():
+            sys.stdout.write("\n")
+            sys.stdout.write(_fmt_when(when, indent))
+            sys.stdout.write("\n")
+
+            # indent names slightly inside 'when', but line up values
+            padded_values -= 2
+            start_indent += 2
+
+        for name, variant in sorted(variants_by_name.items()):
+            _fmt_variant(variant, padded_values, start_indent, None, out=sys.stdout)
+
+
+def print_variants_by_name(pkg):
+    max_name_default_len, variants_by_name = _print_variants_header(pkg)
+    max_name_default_len += 4
 
     indent = 4
     for name, when_variants in variants_by_name.items():
-        from pprint import pprint
+        for when, variants in sorted(when_variants.items(), key=_unconstrained_ver_first):
+            for variant in variants:
+                _fmt_variant(variant, max_name_default_len, indent, when, out=sys.stdout)
+                sys.stdout.write("\n")
 
-        pprint(when_variants)
 
-        if len(when_variants) > 1:
-            print("    ", len(when_variants), "variants")
-            all_variants = sum(when_variants.values(), start=[])
-            if not all(v == all_variants[0] for v in all_variants):
-                color.cprint(f"@r{{-->}} @r{{{name}}} (different)")
-            else:
-                color.cprint(f"@g{{-->}} @g{{{name}}} (same)")
-
-            for when, variants in when_variants.items():
-                for variant in variants:
-                    _fmt_variant(variant, when, max_name_default_len, indent, out=sys.stdout)
-            continue
-
-        when, variants = next(iter(when_variants.items()))
-        _fmt_variant(variants[0], when, max_name_default_len, indent, out=sys.stdout)
+def print_variants(pkg):
+    """output variants"""
+    print_variants_grouped_by_when(pkg)
 
 
 def print_versions(pkg):
@@ -440,13 +469,17 @@ def info(parser, args):
 
     color.cprint(section_title("Homepage: ") + pkg.homepage)
 
+    _print_variants = (
+        print_variants_by_name if args.variants_by_name else print_variants_grouped_by_when
+    )
+
     # Now output optional information in expected order
     sections = [
         (args.all or args.maintainers, print_maintainers),
         (args.all or args.detectable, print_detectable),
         (args.all or args.tags, print_tags),
         (args.all or not args.no_versions, print_versions),
-        (args.all or not args.no_variants, print_variants),
+        (args.all or not args.no_variants, _print_variants),
         (args.all or args.phases, print_phases),
         (args.all or not args.no_dependencies, print_dependencies),
         (args.all or args.virtuals, print_virtuals),
