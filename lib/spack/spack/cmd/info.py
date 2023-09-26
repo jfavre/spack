@@ -293,7 +293,7 @@ def _fmt_variant(variant, max_name_default_len, indent, when=None, out=None):
 
     # This preserves any formatting (i.e., newlines) from how the description was
     # written in package.py, but still wraps long lines for small terminals.
-    # This allows some packages to provide detailed help on their variants (see gasnet).
+    # This allows some packages to provide detailed help on their variants (see, e.g., gasnet).
     formatted_values = "\n".join(
         textwrap.wrap(
             f"{', '.join(_fmt_value(v) for v in sorted_values)}",
@@ -405,18 +405,27 @@ def print_versions(pkg):
         pad = padder(pkg.versions, 4)
 
         preferred = preferred_version(pkg)
+
+        def get_url(version):
+            try:
+                url = fs.for_package_version(pkg, version)
+            except spack.fetch_strategy.InvalidArgsError:
+                return "No URL"
+
         url = ""
         if pkg.has_code:
-            url = fs.for_package_version(pkg, preferred)
+            url = get_url(preferred)
 
         line = version("    {0}".format(pad(preferred))) + color.cescape(url)
-        color.cprint(line)
+        color.cwrite(line)
+
+        print()
 
         safe = []
         deprecated = []
         for v in reversed(sorted(pkg.versions)):
             if pkg.has_code:
-                url = fs.for_package_version(pkg, v)
+                url = get_url(v)
             if pkg.versions[v].get("deprecated", False):
                 deprecated.append((v, url))
             else:
@@ -467,7 +476,8 @@ def info(parser, args):
     else:
         color.cprint("    None")
 
-    color.cprint(section_title("Homepage: ") + pkg.homepage)
+    if getattr(pkg, "homepage"):
+        color.cprint(section_title("Homepage: ") + pkg.homepage)
 
     _print_variants = (
         print_variants_by_name if args.variants_by_name else print_variants_grouped_by_when
