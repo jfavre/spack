@@ -1303,7 +1303,7 @@ class SpackSolverSetup:
         self._effect_cache.clear()
 
     def variant_rules(self, pkg):
-        for name, entry in sorted(pkg.variants.items()):
+        for name, entry in sorted(pkg.variants_by_name().items()):
             variant, when = entry
 
             if spack.spec.Spec() in when:
@@ -1732,6 +1732,48 @@ class SpackSolverSetup:
             raise RuntimeError(msg)
         return clauses
 
+    def _prevalidate_variant_value(spec, value):
+        """Do as much validation of a variant value as is possible before concretization.
+
+        This checks that the variant value can occur in *some* valid concretization of a
+        given spec, and raises if we know *before* concretization that the value cannot
+        occur.
+
+        """
+        # * is meaningless for concretization -- just for matching
+        if value == "*":
+            return
+
+        # validate variant value only if spec is not concrete, not virtual, and the
+        # variant isn't a reserved variant.
+        reserved_names = spack.directives.reserved_names
+        if not spec.concrete and not spec.virtual and vname not in reserved_names:
+            pkg_cls = spack.repo.PATH.get_pkg_class(spec.name)
+            try:
+                variants_by_name = pkg_cls.variants_by_name(when=True)
+                when_variants = variants_by_name[vname]
+            except KeyError:
+                raise RuntimeError(f"variant '{vname}' not found in package '{spec.name}'")
+
+            # do as much prevalidation as we can -- check only those
+            # variants whose when constraint intersects this spec
+            exceptions = []
+            for when, variant_def in when_variants:
+                if spec.intersects(when):
+                    try:
+                        variant_def.validate_or_raise(variant, pkg_cls)
+                        break  # value is potentially valid in some configuration
+                    except spack.error.SpecError as e:
+                        exceptions.append(e)
+            else:
+                if exceptions:
+                    # bad value for all configurations where variant exists; raise first one
+                    # TODO: report about all of them
+                    raise exceptions[0]
+
+                # spec doesn't intesect with any configuration where the variant exists
+                raise RuntimeError(f"variant '{vname}' not valid for '{spec}'")
+
     def _spec_clauses(
         self, spec, body=False, transitive=True, expand_hashes=False, concrete_build_deps=False
     ):
@@ -1810,24 +1852,8 @@ class SpackSolverSetup:
                 values = [values]
 
             for value in values:
-                # * is meaningless for concretization -- just for matching
-                if value == "*":
-                    continue
-
-                # validate variant value only if spec not concrete
-                if not spec.concrete:
-                    reserved_names = spack.directives.reserved_names
-                    if not spec.virtual and vname not in reserved_names:
-                        pkg_cls = spack.repo.PATH.get_pkg_class(spec.name)
-                        try:
-                            variant_def, _ = pkg_cls.variants[vname]
-                        except KeyError:
-                            msg = 'variant "{0}" not found in package "{1}"'
-                            raise RuntimeError(msg.format(vname, spec.name))
-                        else:
-                            variant_def.validate_or_raise(
-                                variant, spack.repo.PATH.get_pkg_class(spec.name)
-                            )
+                # ensure that the value *can* be valid for the spec
+                self._prevalidate_variant_value()
 
                 clauses.append(f.variant_value(spec.name, vname, value))
 

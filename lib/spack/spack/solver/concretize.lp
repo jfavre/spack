@@ -44,16 +44,25 @@
 
 :- attr("root", node(ID, PackageNode)), ID > min_dupe_id.
 
-% Nodes in the "root" unification set cannot depend on non-root nodes if the dependency is "link" or "run"
-:- attr("depends_on", node(min_dupe_id, Package), node(ID, _), "link"), ID != min_dupe_id, unification_set("root", node(min_dupe_id, Package)).
-:- attr("depends_on", node(min_dupe_id, Package), node(ID, _), "run"),  ID != min_dupe_id, unification_set("root", node(min_dupe_id, Package)).
+% Nodes in the "root" unification set cannot depend on non-root nodes if the dependency
+% is "link" or "run"
+:- attr("depends_on", node(min_dupe_id, Package), node(ID, _), "link"),
+   ID != min_dupe_id,
+   unification_set("root", node(min_dupe_id, Package)).
+:- attr("depends_on", node(min_dupe_id, Package), node(ID, _), "run"),
+   ID != min_dupe_id,
+   unification_set("root", node(min_dupe_id, Package)).
 
-% Rules on "unification sets", i.e. on sets of nodes allowing a single configuration of any given package
+% Rules on "unification sets", i.e. on sets of nodes allowing a single configuration of
+% any given package
 unify(SetID, PackageName) :- unification_set(SetID, node(_, PackageName)).
 :- 2 { unification_set(SetID, node(_, PackageName)) }, unify(SetID, PackageName).
 
 unification_set("root", PackageNode) :- attr("root", PackageNode).
-unification_set(SetID, ChildNode) :- attr("depends_on", ParentNode, ChildNode, Type), Type != "build", unification_set(SetID, ParentNode).
+unification_set(SetID, ChildNode)
+  :- attr("depends_on", ParentNode, ChildNode, Type),
+     Type != "build",
+     unification_set(SetID, ParentNode).
 
 unification_set(("build", node(X, Child)), node(X, Child))
   :- attr("depends_on", ParentNode, node(X, Child), Type),
@@ -90,7 +99,9 @@ unification_set(SetID, VirtualNode)
 :- unification_set("root", node(ID, _)), ID != 0.
 
 % In the "root" unification set we allow only packages from the link-run possible subDAG
-:- unification_set("root", node(_, Package)), not possible_in_link_run(Package), not virtual(Package).
+:- unification_set("root", node(_, Package)),
+   not possible_in_link_run(Package),
+   not virtual(Package).
 
 % Each node must belong to at least one unification set
 :- attr("node", PackageNode), not unification_set(_, PackageNode).
@@ -116,17 +127,30 @@ multiple_nodes_attribute("depends_on").
 multiple_nodes_attribute("virtual_on_edge").
 
 % Map constraint on the literal ID to facts on the node
-attr(Name, node(min_dupe_id, A1))             :- literal(LiteralID, Name, A1), solve_literal(LiteralID).
-attr(Name, node(min_dupe_id, A1), A2)         :- literal(LiteralID, Name, A1, A2), solve_literal(LiteralID).
-attr(Name, node(min_dupe_id, A1), A2, A3)     :- literal(LiteralID, Name, A1, A2, A3), solve_literal(LiteralID), not multiple_nodes_attribute(Name).
-attr(Name, node(min_dupe_id, A1), A2, A3, A4) :- literal(LiteralID, Name, A1, A2, A3, A4), solve_literal(LiteralID).
+attr(Name, node(min_dupe_id, A1))
+  :- literal(LiteralID, Name, A1),
+     solve_literal(LiteralID).
+attr(Name, node(min_dupe_id, A1), A2)
+  :- literal(LiteralID, Name, A1, A2),
+     solve_literal(LiteralID).
+attr(Name, node(min_dupe_id, A1), A2, A3)
+  :- literal(LiteralID, Name, A1, A2, A3),
+     solve_literal(LiteralID),
+     not multiple_nodes_attribute(Name).  % special case (see below)
+attr(Name, node(min_dupe_id, A1), A2, A3, A4)
+  :- literal(LiteralID, Name, A1, A2, A3, A4),
+     solve_literal(LiteralID).
 
 % Special cases where nodes occur in arguments other than A1
-attr("node_flag_source", node(min_dupe_id, A1), A2, node(min_dupe_id, A3)) :- literal(LiteralID, "node_flag_source", A1, A2, A3), solve_literal(LiteralID).
-attr("depends_on",       node(min_dupe_id, A1), node(min_dupe_id, A2), A3) :- literal(LiteralID, "depends_on",       A1, A2, A3), solve_literal(LiteralID).
+attr("node_flag_source", node(min_dupe_id, A1), A2, node(min_dupe_id, A3))
+  :- literal(LiteralID, "node_flag_source", A1, A2, A3), solve_literal(LiteralID).
+attr("depends_on",       node(min_dupe_id, A1), node(min_dupe_id, A2), A3)
+  :- literal(LiteralID, "depends_on",       A1, A2, A3), solve_literal(LiteralID).
 
-% Discriminate between "roots" that have been explicitly requested, and roots that are deduced from "virtual roots"
-explicitly_requested_root(node(min_dupe_id, A1)) :- literal(LiteralID, "root", A1), solve_literal(LiteralID).
+% Discriminate between "roots" that have been explicitly requested, and roots that are
+% deduced from "virtual roots"
+explicitly_requested_root(node(min_dupe_id, A1))
+  :- literal(LiteralID, "root", A1), solve_literal(LiteralID).
 
 #defined concretize_everything/0.
 #defined literal/1.
@@ -159,7 +183,8 @@ error(100, multiple_values_error, Attribute, Package)
 
 % Versions are declared with a weight and an origin, which indicates where the
 % version was declared (e.g. "package_py" or "external").
-pkg_fact(Package, version_declared(Version, Weight)) :- pkg_fact(Package, version_declared(Version, Weight, _)).
+pkg_fact(Package, version_declared(Version, Weight))
+  :- pkg_fact(Package, version_declared(Version, Weight, _)).
 
 % We can't emit the same version **with the same weight** from two different sources
 :- pkg_fact(Package, version_declared(Version, Weight, Origin1)),
@@ -229,7 +254,8 @@ possible_version_weight(node(ID, Package), Weight)
    not build(node(ID, Package)),
    internal_error("Build version weight used for reused package").
 
-1 { version_weight(node(ID, Package), Weight) : pkg_fact(Package, version_declared(Version, Weight)) } 1
+1 { version_weight(node(ID, Package), Weight)
+    : pkg_fact(Package, version_declared(Version, Weight)) } 1
   :- attr("version", node(ID, Package), Version),
      attr("node", node(ID, Package)).
 
@@ -238,12 +264,14 @@ possible_version_weight(node(ID, Package), Weight)
 % While this choice rule appears redundant with the initial choice rule for
 % versions, virtual nodes with version constraints require this rule to be
 % able to choose versions
-{ attr("version", node(ID, Package), Version) : pkg_fact(Package, version_satisfies(Constraint, Version)) }
+{ attr("version", node(ID, Package), Version)
+  : pkg_fact(Package, version_satisfies(Constraint, Version)) }
   :- attr("node_version_satisfies", node(ID, Package), Constraint).
 
 % If there is at least a version that satisfy the constraint, impose a lower
 % bound on the choice rule to avoid false positives with the error below
-1 { attr("version", node(ID, Package), Version) : pkg_fact(Package, version_satisfies(Constraint, Version)) }
+1 { attr("version", node(ID, Package), Version)
+    : pkg_fact(Package, version_satisfies(Constraint, Version)) }
   :- attr("node_version_satisfies", node(ID, Package), Constraint),
      pkg_fact(Package, version_satisfies(Constraint, _)).
 
@@ -282,22 +310,34 @@ condition_set(PackageNode, PackageNode, direct_link_run) :- attr("node", Package
 condition_set(PackageNode, PackageNode, direct_link_run) :- provider(PackageNode, VirtualNode).
 condition_set(PackageNode, VirtualNode, direct_link_run) :- provider(PackageNode, VirtualNode).
 
-condition_set(PackageNode, DependencyNode, direct_build) :- condition_set(PackageNode, PackageNode, direct_link_run), attr("depends_on", PackageNode, DependencyNode, "build").
-condition_set(PackageNode, DependencyNode, direct_link_run) :- condition_set(PackageNode, PackageNode, direct_link_run), attr("depends_on", PackageNode, DependencyNode, Type), Type != "build".
+condition_set(PackageNode, DependencyNode, direct_build)
+  :- condition_set(PackageNode, PackageNode, direct_link_run),
+     attr("depends_on", PackageNode, DependencyNode, "build").
 
-condition_set(ID, VirtualNode, Type) :- condition_set(ID, PackageNode, Type), provider(PackageNode, VirtualNode).
+condition_set(PackageNode, DependencyNode, direct_link_run)
+  :- condition_set(PackageNode, PackageNode, direct_link_run),
+     attr("depends_on", PackageNode, DependencyNode, Type),
+     Type != "build".
+
+condition_set(ID, VirtualNode, Type)
+  :- condition_set(ID, PackageNode, Type), provider(PackageNode, VirtualNode).
 
 condition_set(ID, PackageNode) :- condition_set(ID, PackageNode, _).
 
-condition_set(VirtualNode, X) :- provider(PackageNode, VirtualNode), condition_set(PackageNode, X).
+condition_set(VirtualNode, X)
+  :- provider(PackageNode, VirtualNode), condition_set(PackageNode, X).
 
 condition_packages(ID, A1) :- condition_requirement(ID, _, A1).
 condition_packages(ID, A1) :- condition_requirement(ID, _, A1, _).
 condition_packages(ID, A1) :- condition_requirement(ID, _, A1, _, _).
 condition_packages(ID, A1) :- condition_requirement(ID, _, A1, _, _, _).
 
-trigger_node(ID, node(PackageID, Package), node(PackageID, Package)) :- pkg_fact(Package, trigger_id(ID)), attr("node", node(PackageID, Package)).
-trigger_node(ID, node(PackageID, Package), node(VirtualID, Virtual)) :- pkg_fact(Virtual, trigger_id(ID)), provider(node(PackageID, Package), node(VirtualID, Virtual)).
+trigger_node(ID, node(PackageID, Package), node(PackageID, Package))
+  :- pkg_fact(Package, trigger_id(ID)),
+     attr("node", node(PackageID, Package)).
+trigger_node(ID, node(PackageID, Package), node(VirtualID, Virtual))
+  :- pkg_fact(Virtual, trigger_id(ID)),
+     provider(node(PackageID, Package), node(VirtualID, Virtual)).
 
 condition_nodes(TriggerID, PackageNode, node(X, A1))
   :- condition_packages(TriggerID, A1),
@@ -311,12 +351,21 @@ cannot_hold(TriggerID, PackageNode)
 
 trigger_condition_holds(ID, RequestorNode) :-
   trigger_node(ID, PackageNode, RequestorNode);
-  attr(Name, node(X, A1))             : condition_requirement(ID, Name, A1),             condition_nodes(ID, PackageNode, node(X, A1));
-  attr(Name, node(X, A1), A2)         : condition_requirement(ID, Name, A1, A2),         condition_nodes(ID, PackageNode, node(X, A1));
-  attr(Name, node(X, A1), A2, A3)     : condition_requirement(ID, Name, A1, A2, A3),     condition_nodes(ID, PackageNode, node(X, A1)), not multiple_nodes_attribute(Name);
-  attr(Name, node(X, A1), A2, A3, A4) : condition_requirement(ID, Name, A1, A2, A3, A4), condition_nodes(ID, PackageNode, node(X, A1));
+  attr(Name, node(X, A1))             : conditiono_requirement(ID, Name, A1),
+                                        condition_nodes(ID, PackageNode, node(X, A1));
+  attr(Name, node(X, A1), A2)         : condition_requirement(ID, Name, A1, A2),
+                                        condition_nodes(ID, PackageNode, node(X, A1));
+  attr(Name, node(X, A1), A2, A3)     : condition_requirement(ID, Name, A1, A2, A3),
+                                        condition_nodes(ID, PackageNode, node(X, A1)),
+                                        not multiple_nodes_attribute(Name);
+  attr(Name, node(X, A1), A2, A3, A4) : condition_requirement(ID, Name, A1, A2, A3, A4),
+                                        condition_nodes(ID, PackageNode, node(X, A1));
   % Special cases
-  attr("node_flag_source", node(X, A1), A2, node(Y, A3)) : condition_requirement(ID, "node_flag_source", A1, A2, A3), condition_nodes(ID, PackageNode, node(X, A1)), condition_nodes(ID, PackageNode, node(Y, A3));
+  attr("node_flag_source", node(X, A1), A2, node(Y, A3))
+    : condition_requirement(ID, "node_flag_source", A1, A2, A3),
+      condition_nodes(ID, PackageNode, node(X, A1)),
+      condition_nodes(ID, PackageNode, node(Y, A3));
+
   not cannot_hold(ID, PackageNode).
 
 condition_holds(ConditionID, node(X, Package))
@@ -327,8 +376,9 @@ trigger_and_effect(Package, TriggerID, EffectID)
   :- pkg_fact(Package, condition_trigger(ID, TriggerID)),
      pkg_fact(Package, condition_effect(ID, EffectID)).
 
-% condition_holds(ID, node(ID, Package)) implies all imposed_constraints, unless do_not_impose(ID, node(ID, Package))
-% is derived. This allows imposed constraints to be canceled in special cases.
+% condition_holds(ID, node(ID, Package)) implies all imposed_constraints, unless
+% do_not_impose(ID, node(ID, Package)) is derived. This allows imposed constraints to be
+% canceled in special cases.
 impose(EffectID, node(X, Package))
   :- trigger_and_effect(Package, TriggerID, EffectID),
      trigger_node(TriggerID, _, node(X, Package)),
