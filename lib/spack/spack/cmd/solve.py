@@ -48,6 +48,14 @@ def setup_parser(subparser):
     arguments.add_common_arguments(install_status_group, ["install_status", "no_install_status"])
 
     subparser.add_argument(
+        "-d",
+        "--debug-decisions",
+        action="store_true",
+        default=False,
+        help="show non-default decisions in red",
+    )
+
+    subparser.add_argument(
         "-y",
         "--yaml",
         action="store_const",

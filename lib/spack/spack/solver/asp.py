@@ -933,7 +933,7 @@ class PyclingoDriver:
                 if sym.name not in ("attr", "error", "opt_criterion"):
                     tty.debug(
                         "UNKNOWN SYMBOL: %s(%s)"
-                        % (sym.name, ", ".join(intermediate_repr(sym.arguments)))
+                        % (sym.name, ", ".join(str(s) for s in intermediate_repr(sym.arguments)))
                     )
 
         elif cores:
@@ -2784,6 +2784,26 @@ class SpecBuilder:
 
     def deprecated(self, node: NodeArgument, version: str) -> None:
         tty.warn(f'using "{node.pkg}@{version}" which is a deprecated version')
+
+    def version_weight(self, node: NodeArgument, weight: int):
+        self._specs[node]._weights["version_weight"] = int(weight)
+
+    def provider_weight(self, node: NodeArgument, virtual: str, weight: int):
+        self._specs[node]._weights[f"provider_weight({virtual.pkg})"] = int(weight)
+        self._specs[node]._weights.setdefault("provider_weight", 0)
+        self._specs[node]._weights["provider_weight"] += int(weight)
+
+    def variant_not_default(self, node: NodeArgument, variant: str, value: str):
+        self._specs[node]._weights[f"variant_not_default({variant})"] = bool(value)
+
+    def variant_default_not_used(self, node: NodeArgument, variant: str, value: str):
+        self._specs[node]._weights[f"variant_default_not_used({variant})"] = bool(value)
+
+    def compiler_weight(self, node: NodeArgument, weight: int):
+        self._specs[node]._weights["compiler_weight"] = int(weight)
+
+    def node_target_weight(self, node: NodeArgument, weight: int):
+        self._specs[node]._weights["node_target_weight"] = int(weight)
 
     @staticmethod
     def sort_fn(function_tuple):

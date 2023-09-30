@@ -34,6 +34,14 @@ for further documentation regarding the spec syntax, see:
     install_status_group = subparser.add_mutually_exclusive_group()
     arguments.add_common_arguments(install_status_group, ["install_status", "no_install_status"])
 
+    subparser.add_argument(
+        "-d",
+        "--debug-decisions",
+        action="store_true",
+        default=False,
+        help="show non-default decisions in red",
+    )
+
     format_group = subparser.add_mutually_exclusive_group()
     format_group.add_argument(
         "-y",
@@ -133,4 +141,5 @@ def spec(parser, args):
                 print("--------------------------------")
 
             tree_kwargs["hashes"] = args.long or args.very_long
+            tree_kwargs["nondefaults"] = args.debug_decisions
             print(output.tree(**tree_kwargs))
