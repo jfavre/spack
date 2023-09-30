@@ -122,31 +122,14 @@ __all__ = [
 
 IDENTIFIER_RE = r"\w[\w-]*"
 
+# Coloring of specs when using color output. Fields are printed with
+# different colors to enhance readability.
+# See llnl.util.tty.color for descriptions of the color codes.
 COMPILER_COLOR = "@g"  #: color for highlighting compilers
 VERSION_COLOR = "@c"  #: color for highlighting versions
 ARCHITECTURE_COLOR = "@m"  #: color for highlighting architectures
-ENABLED_VARIANT_COLOR = "@B"  #: color for highlighting enabled variants
-DISABLED_VARIANT_COLOR = "r"  #: color for highlighting disabled varaints
-DEPENDENCY_COLOR = "@."  #: color for highlighting dependencies
+VARIANT_COLOR = "@B"  #: color for highlighting variants
 HASH_COLOR = "@K"  #: color for highlighting package hashes
-
-#: This map determines the coloring of specs when using color output.
-#: We make the fields different colors to enhance readability.
-#: See llnl.util.tty.color for descriptions of the color codes.
-COLOR_FORMATS = {
-    "%": COMPILER_COLOR,
-    "@": VERSION_COLOR,
-    "=": ARCHITECTURE_COLOR,
-    "+": ENABLED_VARIANT_COLOR,
-    "~": DISABLED_VARIANT_COLOR,
-    "^": DEPENDENCY_COLOR,
-    "#": HASH_COLOR,
-}
-
-#: Regex used for splitting by spec field separators.
-#: These need to be escaped to avoid metacharacters in
-#: ``COLOR_FORMATS.keys()``.
-_SEPARATORS = "[\\%s]" % "\\".join(COLOR_FORMATS.keys())
 
 #: Default format for Spec.format(). This format can be round-tripped, so that:
 #:     Spec(Spec("string").format()) == Spec("string)"
@@ -188,26 +171,6 @@ class InstallStatus(enum.Enum):
     external = "@g{[e]}  "
     absent = "@K{ - }  "
     missing = "@r{[-]}  "
-
-
-def colorize_spec(spec):
-    """Returns a spec colorized according to the colors specified in
-    COLOR_FORMATS."""
-
-    class insert_color:
-        def __init__(self):
-            self.last = None
-
-        def __call__(self, match):
-            # ignore compiler versions (color same as compiler)
-            sep = match.group(0)
-            if self.last == "%" and sep == "@":
-                return clr.cescape(sep)
-            self.last = sep
-
-            return "%s%s" % (COLOR_FORMATS[sep], clr.cescape(sep))
-
-    return clr.colorize(re.sub(_SEPARATORS, insert_color(), str(spec)) + "@.")
 
 
 @lang.lazy_lexicographic_ordering
@@ -4278,18 +4241,18 @@ class Spec:
                 that accepts a string and returns another one
 
         """
-        color = kwargs.get("color", False)
+        enable_color = kwargs.get("color", False)
         transform = kwargs.get("transform", {})
 
         out = io.StringIO()
 
-        def write(s, c=None):
-            f = clr.cescape(s)
-            if c is not None:
-                f = COLOR_FORMATS[c] + f + "@."
-            clr.cwrite(f, stream=out, color=color)
+        def write(s, color=None):
+            escaped = clr.cescape(s)
+            if color is not None:
+                escaped = f"{color}{escaped}@."
+            clr.cwrite(escaped, stream=out, color=enable_color)
 
-        def write_attribute(spec, attribute, color):
+        def write_attribute(spec, attribute):
             attribute = attribute.lower()
 
             sig = ""
@@ -4335,12 +4298,11 @@ class Spec:
                 write(morph(spec, spack.store.STORE.layout.root))
                 return
             elif re.match(r"hash(:\d)?", attribute):
-                col = "#"
                 if ":" in attribute:
                     _, length = attribute.split(":")
-                    write(sig + morph(spec, current.dag_hash(int(length))), col)
+                    write(sig + morph(spec, current.dag_hash(int(length))), HASH_COLOR)
                 else:
-                    write(sig + morph(spec, current.dag_hash()), col)
+                    write(sig + morph(spec, current.dag_hash()), HASH_COLOR)
                 return
 
             # Iterate over components using getattr to get next element
@@ -4384,18 +4346,18 @@ class Spec:
                         return
 
             # Set color codes for various attributes
-            col = None
+            color = None
             if "variants" in parts:
-                col = "+"
+                color = VARIANT_COLOR
             elif "architecture" in parts:
-                col = "="
+                color = ARCHITECTURE_COLOR
             elif "compiler" in parts or "compiler_flags" in parts:
-                col = "%"
+                color = COMPILER_COLOR
             elif "version" in parts or "versions" in parts:
-                col = "@"
+                color = VERSION_COLOR
 
             # Finally, write the output
-            write(sig + morph(spec, str(current)), col)
+            write(sig + morph(spec, str(current)), color)
 
         attribute = ""
         in_attribute = False
@@ -4409,7 +4371,7 @@ class Spec:
                 escape = True
             elif in_attribute:
                 if c == "}":
-                    write_attribute(self, attribute, color)
+                    write_attribute(self, attribute)
                     attribute = ""
                     in_attribute = False
                 else:

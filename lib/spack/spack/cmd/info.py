@@ -338,10 +338,7 @@ def print_virtuals(pkg):
                     inverse_map[when] = set()
                 inverse_map[when].add(spec)
         for when, specs in reversed(sorted(inverse_map.items())):
-            line = "    %s provides %s" % (
-                when.colorized(),
-                ", ".join(s.colorized() for s in specs),
-            )
+            line = "    %s provides %s" % (when.cformat(), ", ".join(s.cformat() for s in specs))
             print(line)
 
     else:
