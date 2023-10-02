@@ -130,7 +130,7 @@ VERSION_COLOR = "@c"  #: color for highlighting versions
 ARCHITECTURE_COLOR = "@m"  #: color for highlighting architectures
 VARIANT_COLOR = "@B"  #: color for highlighting variants
 HASH_COLOR = "@K"  #: color for highlighting package hashes
-NONDEFAULT_COLOR = "@R"  #: color for highlighting non-defaults in spec output
+NONDEFAULT_COLOR = "@*R"  #: color for highlighting non-defaults in spec output
 
 #: Default format for Spec.format(). This format can be round-tripped, so that:
 #:     Spec(Spec("string").format()) == Spec("string)"
@@ -4378,8 +4378,10 @@ class Spec:
                         write(" ")
                     write(morph(spec, str(variant)), attr_color)
                 return
-
+            elif "name" == parts[0]:
+                attr_color = color_nondefaults(None, f"provider_weight")
             elif "architecture" in parts:
+                # TODO: handle arch parts independently
                 attr_color = color_nondefaults(ARCHITECTURE_COLOR, f"node_target_weight")
             elif "compiler" in parts or "compiler_flags" in parts:
                 attr_color = color_nondefaults(COMPILER_COLOR, f"compiler_weight")

@@ -2789,7 +2789,6 @@ class SpecBuilder:
         self._specs[node]._weights["version_weight"] = int(weight)
 
     def provider_weight(self, node: NodeArgument, virtual: str, weight: int):
-        self._specs[node]._weights[f"provider_weight({virtual.pkg})"] = int(weight)
         self._specs[node]._weights.setdefault("provider_weight", 0)
         self._specs[node]._weights["provider_weight"] += int(weight)
 
