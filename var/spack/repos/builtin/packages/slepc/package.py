@@ -156,7 +156,7 @@ class Slepc(Package, CudaPackage, ROCmPackage):
 
         python("configure", "--prefix=%s" % prefix, *options)
 
-        make("V=1")
+        make("OMAKE_PRINTDIR=%s" % make, "V=1")
         if self.run_tests:
             make("test", parallel=False)
 
